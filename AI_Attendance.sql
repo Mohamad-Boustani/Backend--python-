@@ -1,0 +1,117 @@
+CREATE TABLE Departments
+(
+  Department_ID INT NOT NULL AUTO_INCREMENT,
+  Department_Name VARCHAR(50) NOT NULL,
+  PRIMARY KEY (Department_ID),
+  UNIQUE (Department_Name)
+);
+
+CREATE TABLE INSTRUCTOR
+(
+  Instructor_ID INT NOT NULL AUTO_INCREMENT,
+  Full_Name VARCHAR(100) NOT NULL,
+  Work_Email VARCHAR(100) NOT NULL,
+  Department_ID INT NOT NULL,
+  PRIMARY KEY (Instructor_ID),
+  FOREIGN KEY (Department_ID) REFERENCES Departments(Department_ID),
+  UNIQUE (Work_Email)
+);
+
+CREATE TABLE Major
+(
+  Major_ID INT NOT NULL AUTO_INCREMENT,
+  Major_Name VARCHAR(50) NOT NULL,
+  PRIMARY KEY (Major_ID),
+  UNIQUE (Major_Name)
+);
+
+CREATE TABLE STUDENT
+(
+  Student_ID INT NOT NULL AUTO_INCREMENT,
+  Full_Name VARCHAR(100) NOT NULL,
+  University_Email VARCHAR(100) NOT NULL,
+  Phone_Number VARCHAR(20),
+  Major_ID INT NOT NULL,
+  PRIMARY KEY (Student_ID),
+  FOREIGN KEY (Major_ID) REFERENCES Major(Major_ID),
+  UNIQUE (University_Email)
+);
+
+CREATE TABLE ADMIN
+(
+  Admin_ID INT NOT NULL AUTO_INCREMENT,
+  Admin_Email VARCHAR(100) NOT NULL,
+  Full_Name VARCHAR(100) NOT NULL,
+  Privilege_Level VARCHAR(20) NOT NULL,
+  PRIMARY KEY (Admin_ID),
+  UNIQUE (Admin_Email)
+);
+
+CREATE TABLE COURSE
+(
+  Course_ID INT NOT NULL AUTO_INCREMENT,
+  Course_Name VARCHAR(100) NOT NULL,
+  Credits INT NOT NULL,
+  Description VARCHAR(500) NOT NULL,
+  PRIMARY KEY (Course_ID),
+  CHECK (Credits > 0)
+);
+
+CREATE TABLE SECTION
+(
+  Section_ID INT NOT NULL AUTO_INCREMENT,
+  Semester VARCHAR(20) NOT NULL,
+  Days VARCHAR(20) NOT NULL,
+  Room_Number VARCHAR(20) NOT NULL,
+  Start_Time TIME NOT NULL,
+  End_Time TIME NOT NULL,
+  Instructor_ID INT NOT NULL,
+  Course_ID INT NOT NULL,
+  PRIMARY KEY (Section_ID),
+  FOREIGN KEY (Instructor_ID) REFERENCES INSTRUCTOR(Instructor_ID),
+  FOREIGN KEY (Course_ID) REFERENCES COURSE(Course_ID),
+  CHECK (Start_Time < End_Time)
+);
+
+CREATE TABLE ATTENDANCE_RECORD
+(
+  Record_ID INT NOT NULL AUTO_INCREMENT,
+  Attendance_Date DATE NOT NULL,
+  Status ENUM('Present', 'Absent', 'Late', 'Excused') NOT NULL,
+  Confidence_Score DECIMAL(5,4) NOT NULL,
+  Student_ID INT NOT NULL,
+  Instructor_ID INT NOT NULL,
+  Section_ID INT NOT NULL,
+  PRIMARY KEY (Record_ID),
+  FOREIGN KEY (Student_ID) REFERENCES STUDENT(Student_ID),
+  FOREIGN KEY (Instructor_ID) REFERENCES INSTRUCTOR(Instructor_ID),
+  FOREIGN KEY (Section_ID) REFERENCES SECTION(Section_ID),
+  CHECK (Confidence_Score >= 0 AND Confidence_Score <= 1)
+);
+
+CREATE TABLE FACE_TEMPLATE
+(
+  Template_ID INT NOT NULL AUTO_INCREMENT,
+  Last_Updated DATE NOT NULL,
+  Student_ID INT NOT NULL,
+  PRIMARY KEY (Template_ID),
+  FOREIGN KEY (Student_ID) REFERENCES STUDENT(Student_ID),
+  UNIQUE (Student_ID)
+);
+
+CREATE TABLE FACE_TEMPLATE_ENCODING_VECTOR
+(
+  Template_ID INT NOT NULL,
+  Encoding_Vector TEXT NOT NULL,
+  PRIMARY KEY (Template_ID),
+  FOREIGN KEY (Template_ID) REFERENCES FACE_TEMPLATE(Template_ID)
+);
+
+CREATE TABLE Enrollment
+(
+  Student_ID INT NOT NULL,
+  Section_ID INT NOT NULL,
+  PRIMARY KEY (Student_ID, Section_ID),
+  FOREIGN KEY (Student_ID) REFERENCES STUDENT(Student_ID),
+  FOREIGN KEY (Section_ID) REFERENCES SECTION(Section_ID)
+);

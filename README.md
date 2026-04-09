@@ -11,6 +11,7 @@ Note: the backend is configured to use an existing database schema and does not 
 - SQLAlchemy (ORM)
 - MySQL support via PyMySQL
 - Uvicorn (ASGI server)
+- face_recognition for face embeddings
 
 ## Quick Start
 
@@ -32,6 +33,18 @@ uvicorn app.main:app --reload
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
+
+## Face Encoding
+
+Use `POST /api/v1/face-templates/encode` with `student_id` and 3 to 4 uploaded face images. The backend will:
+
+- detect a single face in each image
+- convert each one to a 128-dimensional embedding vector using `face_recognition`
+- store all vectors in the database for later matching
+
+To identify a student during class session start, use `POST /api/v1/face-recognition/identify` with `section_id` and one live face image. The backend compares that face only against students enrolled in that section, then writes an attendance record when a match is found.
+
+If the AI does not recognize a student, the teacher can manually submit attendance with `POST /api/v1/attendance-records/manual`. That route stores the record with a default confidence score of `1.0` because it was entered by the teacher.
 
 ## Flutter Compatibility
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+# Department table for academic departments.
 class Department(Base):
     __tablename__ = "departments"
 
@@ -13,6 +14,7 @@ class Department(Base):
     department_name: Mapped[str] = mapped_column("Department_Name", String(50), nullable=False, unique=True)
 
 
+# Instructor table for teaching staff.
 class Instructor(Base):
     __tablename__ = "instructor"
 
@@ -26,6 +28,7 @@ class Instructor(Base):
     department = relationship("Department")
 
 
+# Major table for student majors.
 class Major(Base):
     __tablename__ = "major"
 
@@ -33,6 +36,7 @@ class Major(Base):
     major_name: Mapped[str] = mapped_column("Major_Name", String(50), nullable=False, unique=True)
 
 
+# Student table for enrolled learners.
 class Student(Base):
     __tablename__ = "student"
 
@@ -45,6 +49,7 @@ class Student(Base):
     major = relationship("Major")
 
 
+# Admin table for system administrators.
 class Admin(Base):
     __tablename__ = "admin"
 
@@ -54,6 +59,7 @@ class Admin(Base):
     privilege_level: Mapped[str] = mapped_column("Privilege_Level", String(20), nullable=False)
 
 
+# Course table for subject metadata.
 class Course(Base):
     __tablename__ = "course"
     __table_args__ = (CheckConstraint("Credits > 0", name="check_course_credits_positive"),)
@@ -64,6 +70,7 @@ class Course(Base):
     description: Mapped[str] = mapped_column("Description", String(500), nullable=False)
 
 
+# Section table for scheduled class offerings.
 class Section(Base):
     __tablename__ = "section"
     __table_args__ = (CheckConstraint("Start_Time < End_Time", name="check_section_time_order"),)
@@ -81,6 +88,7 @@ class Section(Base):
     course = relationship("Course")
 
 
+# Attendance records store per-session presence and confidence.
 class AttendanceRecord(Base):
     __tablename__ = "attendance_record"
     __table_args__ = (
@@ -104,6 +112,7 @@ class AttendanceRecord(Base):
     section = relationship("Section")
 
 
+# FaceTemplate stores the owner student and last update date.
 class FaceTemplate(Base):
     __tablename__ = "face_template"
 
@@ -114,6 +123,7 @@ class FaceTemplate(Base):
     student = relationship("Student")
 
 
+# FaceTemplateEncodingVector stores the numeric face embedding as text.
 class FaceTemplateEncodingVector(Base):
     __tablename__ = "face_template_encoding_vector"
 
@@ -125,6 +135,7 @@ class FaceTemplateEncodingVector(Base):
     face_template = relationship("FaceTemplate")
 
 
+# Enrollment links a student to a class section.
 class Enrollment(Base):
     __tablename__ = "enrollment"
 

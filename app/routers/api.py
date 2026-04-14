@@ -4,7 +4,7 @@ from datetime import date
 
 import face_recognition
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import File, Form, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -99,6 +99,60 @@ def _get_section_context(db: Session, section_id: int):
     return section
 
 
+# Find a student by primary key so update and delete can share the same 404 behavior.
+def _get_student_context(db: Session, student_id: int):
+    student = db.query(models.Student).filter(models.Student.student_id == student_id).first()
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    return student
+
+
+# Find the first admin profile when no authentication system is available.
+def _get_admin_profile(db: Session):
+    admin = db.query(models.Admin).order_by(models.Admin.admin_id.asc()).first()
+    if admin is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    return admin
+
+
+# Validate the student, section, and enrollment required for attendance writes.
+def _validate_attendance_targets(db: Session, student_id: int, section_id: int):
+    student = db.query(models.Student).filter(models.Student.student_id == student_id).first()
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    section = _get_section_context(db, section_id)
+    enrollment_exists = (
+        db.query(models.Enrollment)
+        .filter(
+            models.Enrollment.student_id == student_id,
+            models.Enrollment.section_id == section_id,
+        )
+        .first()
+        is not None
+    )
+    if not enrollment_exists:
+        raise HTTPException(status_code=400, detail="Student is not enrolled in this section")
+
+    return student, section
+
+
+# Prevent deleting a student who is still referenced by other tables.
+def _student_has_dependencies(db: Session, student_id: int) -> list[str]:
+    dependencies: list[str] = []
+
+    if db.query(models.Enrollment).filter(models.Enrollment.student_id == student_id).first() is not None:
+        dependencies.append("enrollments")
+
+    if db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == student_id).first() is not None:
+        dependencies.append("attendance records")
+
+    if db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first() is not None:
+        dependencies.append("face templates")
+
+    return dependencies
+
+
 # Prevent duplicate attendance entries for the same student, section, and date.
 def _attendance_already_exists(db: Session, attendance_date: date, student_id: int, section_id: int) -> bool:
     existing_attendance = (
@@ -119,6 +173,70 @@ def _commit_or_400(db: Session):
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Database integrity error: {exc.orig}") from exc
+
+
+# Return a count for a table query without loading rows.
+def _count_rows(query) -> int:
+    return int(query.count())
+
+
+# Ensure a student email stays unique when updating records.
+def _student_email_in_use(db: Session, university_email: str, student_id: int | None = None) -> bool:
+    query = db.query(models.Student).filter(models.Student.university_email == university_email)
+    if student_id is not None:
+        query = query.filter(models.Student.student_id != student_id)
+    return query.first() is not None
+
+
+# Ensure a major exists before assigning it to a student.
+def _major_exists(db: Session, major_id: int) -> bool:
+    return db.query(models.Major).filter(models.Major.major_id == major_id).first() is not None
+
+
+# Log in an admin by email because the current schema does not store passwords.
+@router.post("/auth/login", response_model=schemas.LoginResponse)
+def login_admin(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
+    admin = db.query(models.Admin).filter(models.Admin.admin_email == payload.admin_email).first()
+    if admin is None:
+        raise HTTPException(status_code=401, detail="Invalid admin email")
+
+    return schemas.LoginResponse(
+        authenticated=True,
+        message="Login successful",
+        admin=admin,
+    )
+
+
+# Return a lightweight summary for the admin dashboard.
+@router.get("/dashboard", response_model=schemas.DashboardOut)
+def get_dashboard_summary(db: Session = Depends(get_db)):
+    today = date.today()
+
+    total_attendance_records = db.query(models.AttendanceRecord).count()
+    attendance_today = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.attendance_date == today).count()
+    present_today = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.attendance_date == today,
+            models.AttendanceRecord.status == "Present",
+        )
+        .count()
+    )
+
+    return schemas.DashboardOut(
+        total_departments=_count_rows(db.query(models.Department)),
+        total_majors=_count_rows(db.query(models.Major)),
+        total_instructors=_count_rows(db.query(models.Instructor)),
+        total_students=_count_rows(db.query(models.Student)),
+        total_admins=_count_rows(db.query(models.Admin)),
+        total_courses=_count_rows(db.query(models.Course)),
+        total_sections=_count_rows(db.query(models.Section)),
+        total_attendance_records=total_attendance_records,
+        total_face_templates=_count_rows(db.query(models.FaceTemplate)),
+        total_enrollments=_count_rows(db.query(models.Enrollment)),
+        attendance_today=attendance_today,
+        present_today=present_today,
+    )
 
 
 # List all departments.
@@ -175,6 +293,16 @@ def list_students(db: Session = Depends(get_db)):
     return db.query(models.Student).all()
 
 
+# Search students by name.
+@router.get("/students/search", response_model=list[schemas.StudentOut])
+def search_students(name: str, db: Session = Depends(get_db)):
+    return (
+        db.query(models.Student)
+        .filter(models.Student.full_name.ilike(f"%{name}%"))
+        .all()
+    )
+
+
 # Create a student.
 @router.post("/students", response_model=schemas.StudentOut, status_code=201)
 def create_student(payload: schemas.StudentCreate, db: Session = Depends(get_db)):
@@ -183,6 +311,47 @@ def create_student(payload: schemas.StudentCreate, db: Session = Depends(get_db)
     _commit_or_400(db)
     db.refresh(item)
     return item
+
+
+# Update an existing student.
+@router.put("/students/{student_id}", response_model=schemas.StudentOut)
+def update_student(student_id: int, payload: schemas.StudentUpdate, db: Session = Depends(get_db)):
+    student = _get_student_context(db, student_id)
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="At least one field must be provided")
+
+    if "university_email" in update_data and _student_email_in_use(db, update_data["university_email"], student_id):
+        raise HTTPException(status_code=400, detail="University email already exists")
+
+    if "major_id" in update_data and not _major_exists(db, update_data["major_id"]):
+        raise HTTPException(status_code=404, detail="Major not found")
+
+    for field_name, field_value in update_data.items():
+        setattr(student, field_name, field_value)
+
+    _commit_or_400(db)
+    db.refresh(student)
+    return student
+
+
+# Delete a student.
+@router.delete("/students/{student_id}", response_model=schemas.StudentOut)
+def delete_student(student_id: int, db: Session = Depends(get_db)):
+    student = _get_student_context(db, student_id)
+
+    dependencies = _student_has_dependencies(db, student_id)
+    if dependencies:
+        dependency_list = ", ".join(dependencies)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Student cannot be deleted because related {dependency_list} still exist",
+        )
+
+    db.delete(student)
+    _commit_or_400(db)
+    return student
 
 
 # List all admins.
@@ -236,6 +405,19 @@ def create_section(payload: schemas.SectionCreate, db: Session = Depends(get_db)
     return item
 
 
+# List students enrolled in one section.
+@router.get("/sections/{section_id}/students", response_model=list[schemas.StudentOut])
+def list_section_students(section_id: int, db: Session = Depends(get_db)):
+    _get_section_context(db, section_id)
+    return (
+        db.query(models.Student)
+        .join(models.Enrollment, models.Student.student_id == models.Enrollment.student_id)
+        .filter(models.Enrollment.section_id == section_id)
+        .order_by(models.Student.full_name.asc())
+        .all()
+    )
+
+
 # List attendance records.
 @router.get("/attendance-records", response_model=list[schemas.AttendanceRecordOut])
 def list_attendance_records(db: Session = Depends(get_db)):
@@ -245,6 +427,8 @@ def list_attendance_records(db: Session = Depends(get_db)):
 # Create an attendance record.
 @router.post("/attendance-records", response_model=schemas.AttendanceRecordOut, status_code=201)
 def create_attendance_record(payload: schemas.AttendanceRecordCreate, db: Session = Depends(get_db)):
+    _validate_attendance_targets(db, payload.student_id, payload.section_id)
+
     if _attendance_already_exists(db, payload.attendance_date, payload.student_id, payload.section_id):
         raise HTTPException(status_code=400, detail="Attendance already exists for this student in this section on this date")
 
@@ -255,12 +439,76 @@ def create_attendance_record(payload: schemas.AttendanceRecordCreate, db: Sessio
     return item
 
 
+# Save attendance through the unified endpoint used by auto and manual flows.
+@router.post("/attendance", response_model=schemas.AttendanceRecordOut, status_code=201)
+def save_attendance(payload: schemas.AttendanceSaveCreate, db: Session = Depends(get_db)):
+    _validate_attendance_targets(db, payload.student_id, payload.section_id)
+
+    if _attendance_already_exists(db, payload.attendance_date, payload.student_id, payload.section_id):
+        raise HTTPException(status_code=400, detail="Attendance already exists for this student in this section on this date")
+
+    attendance_data = payload.model_dump(exclude_none=True)
+    confidence_score = float(attendance_data.pop("confidence_score", 1.0))
+    item = models.AttendanceRecord(**attendance_data, confidence_score=confidence_score)
+    db.add(item)
+    _commit_or_400(db)
+    db.refresh(item)
+    return item
+
+
+# Get attendance records for a single section and date.
+@router.get("/attendance", response_model=list[schemas.AttendanceRecordOut])
+def get_attendance_for_class(
+    section_id: int = Query(...),
+    attendance_date: date = Query(..., alias="date"),
+    db: Session = Depends(get_db),
+):
+    _get_section_context(db, section_id)
+
+    return (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.section_id == section_id,
+            models.AttendanceRecord.attendance_date == attendance_date,
+        )
+        .order_by(models.AttendanceRecord.record_id.asc())
+        .all()
+    )
+
+
+# Get attendance history for one section.
+@router.get("/attendance/history", response_model=list[schemas.AttendanceRecordOut])
+def get_attendance_history(section_id: int, db: Session = Depends(get_db)):
+    _get_section_context(db, section_id)
+    return (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.section_id == section_id)
+        .order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.record_id.desc())
+        .all()
+    )
+
+
+# Search attendance history by student name.
+@router.get("/attendance/history/search", response_model=list[schemas.AttendanceRecordOut])
+def search_attendance_history(name: str, section_id: int | None = None, db: Session = Depends(get_db)):
+    query = (
+        db.query(models.AttendanceRecord)
+        .join(models.Student, models.Student.student_id == models.AttendanceRecord.student_id)
+        .filter(models.Student.full_name.ilike(f"%{name}%"))
+    )
+    if section_id is not None:
+        query = query.filter(models.AttendanceRecord.section_id == section_id)
+    return query.order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.record_id.desc()).all()
+
+
 # Create an attendance record manually when the teacher overrides the AI.
 @router.post("/attendance-records/manual", response_model=schemas.AttendanceRecordOut, status_code=201)
 def create_manual_attendance_record(
     payload: schemas.AttendanceRecordManualCreate,
     db: Session = Depends(get_db),
 ):
+    _validate_attendance_targets(db, payload.student_id, payload.section_id)
+
     if _attendance_already_exists(db, payload.attendance_date, payload.student_id, payload.section_id):
         raise HTTPException(status_code=400, detail="Attendance already exists for this student in this section on this date")
 
@@ -304,6 +552,47 @@ def create_face_template_vector(payload: schemas.FaceTemplateEncodingVectorCreat
     _commit_or_400(db)
     db.refresh(item)
     return item
+
+
+# Register one face image for a student.
+@router.post("/face/register", response_model=schemas.FaceEnrollmentResponse, status_code=201)
+async def register_face(
+    student_id: int = Form(...),
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    image_bytes = await image.read()
+    encoding_vector = _encode_face_image(image_bytes)
+
+    template = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first()
+    if template is None:
+        template = models.FaceTemplate(last_updated=date.today(), student_id=student_id)
+        db.add(template)
+        db.flush()
+    else:
+        template.last_updated = date.today()
+
+    vector_json = json.dumps([encoding_vector])
+    template_vector = (
+        db.query(models.FaceTemplateEncodingVector)
+        .filter(models.FaceTemplateEncodingVector.template_id == template.template_id)
+        .first()
+    )
+
+    if template_vector is None:
+        template_vector = models.FaceTemplateEncodingVector(template_id=template.template_id, encoding_vector=vector_json)
+        db.add(template_vector)
+    else:
+        template_vector.encoding_vector = vector_json
+
+    _commit_or_400(db)
+    db.refresh(template)
+    return schemas.FaceEnrollmentResponse(
+        template_id=template.template_id,
+        student_id=template.student_id,
+        image_count=1,
+        encoding_vectors=[encoding_vector],
+    )
 
 
 # Enroll a student with 3 to 4 face images and store all embeddings.
@@ -353,6 +642,7 @@ async def create_face_template_encoding(
 
 
 # Identify a student within a specific section and create attendance if matched.
+@router.post("/face/recognize", response_model=schemas.FaceRecognitionResponse)
 @router.post("/face-recognition/identify", response_model=schemas.FaceRecognitionResponse)
 async def identify_face(
     section_id: int = Form(...),
@@ -407,6 +697,12 @@ async def identify_face(
         attendance_record_id=attendance.record_id,
         attendance_created=attendance_created,
     )
+
+
+# Return the current admin profile.
+@router.get("/admin/profile", response_model=schemas.AdminOut)
+def get_admin_profile(db: Session = Depends(get_db)):
+    return _get_admin_profile(db)
 
 
 # List student-to-section enrollments.

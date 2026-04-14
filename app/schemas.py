@@ -48,6 +48,14 @@ class StudentCreate(BaseModel):
     major_id: int
 
 
+# Request body for updating a student.
+class StudentUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=100)
+    university_email: EmailStr | None = None
+    phone_number: str | None = Field(default=None, max_length=20)
+    major_id: int | None = None
+
+
 # Response model for student data.
 class StudentOut(StudentCreate):
     student_id: int
@@ -64,6 +72,19 @@ class AdminCreate(BaseModel):
 # Response model for admin data.
 class AdminOut(AdminCreate):
     admin_id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Request body for admin login.
+class LoginRequest(BaseModel):
+    admin_email: EmailStr
+
+
+# Response body for admin login.
+class LoginResponse(BaseModel):
+    authenticated: bool
+    message: str
+    admin: AdminOut | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -122,6 +143,16 @@ class AttendanceRecordManualCreate(BaseModel):
     section_id: int
 
 
+# Request body for saving attendance through the unified endpoint.
+class AttendanceSaveCreate(BaseModel):
+    attendance_date: date
+    status: Literal["Present", "Absent", "Late", "Excused"]
+    student_id: int
+    instructor_id: int
+    section_id: int
+    confidence_score: Decimal | None = Field(default=None, ge=0, le=1)
+
+
 # Request body for creating a face template entry.
 class FaceTemplateCreate(BaseModel):
     last_updated: date
@@ -175,4 +206,21 @@ class EnrollmentCreate(BaseModel):
 
 # Response model for enrollment records.
 class EnrollmentOut(EnrollmentCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Dashboard summary for the frontend.
+class DashboardOut(BaseModel):
+    total_departments: int
+    total_majors: int
+    total_instructors: int
+    total_students: int
+    total_admins: int
+    total_courses: int
+    total_sections: int
+    total_attendance_records: int
+    total_face_templates: int
+    total_enrollments: int
+    attendance_today: int
+    present_today: int
     model_config = ConfigDict(from_attributes=True)

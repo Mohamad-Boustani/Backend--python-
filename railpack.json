@@ -6,7 +6,8 @@
       "libglib2.0-0",
       "libsm6",
       "libxext6",
-      "libxrender1"
+      "libxrender1",
+      "libpng16-16"
     ],
     "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
   }

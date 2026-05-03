@@ -7,8 +7,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # Load database settings from environment variables.
 load_dotenv()
 
-# Fall back to a local MySQL URL when DATABASE_URL is not provided.
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:password@localhost:3306/ai_attendance")
+# Fall back to Railway MySQL URL when DATABASE_URL is not provided.
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:pKwQXadTVCZSuPzcVNKJFldpyEAipxod@mysql.railway.internal:3306/railway")
 
 # SQLite needs a different connection argument than MySQL.
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

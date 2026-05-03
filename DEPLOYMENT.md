@@ -16,7 +16,8 @@ This backend is ready to deploy on Railway.
 2. **Create a new Railway project:**
    - Go to https://railway.app and create a new project.
    - Select "Deploy from GitHub" and choose your repository.
-   - Railway will auto-detect `Procfile` and `requirements.txt`.
+   - If your repository contains multiple apps (for example Flutter + backend), set Railway service **Root Directory** to `Backend (python)`.
+   - Railway will auto-detect `Procfile`, `railpack.json`, and `requirements.txt` from that root directory.
 
 3. **Add MySQL Database:**
    - In Railway, add a MySQL plugin to your project.

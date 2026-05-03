@@ -7,7 +7,8 @@
       "libsm6",
       "libxext6",
       "libxrender1",
-      "libpng16-16"
+      "libpng16-16",
+      "libjpeg62-turbo"
     ],
     "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
   }

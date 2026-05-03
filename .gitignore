@@ -1,0 +1,12 @@
+# Local development files (do not commit)
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.DS_Store
+*.db
+*.sqlite
+.idea/
+.vscode/

@@ -54,6 +54,11 @@ If the build fails:
 - Ensure `requirements.txt` has all packages (including `face-recognition` if needed; see note below).
 - Verify `app/main.py` imports are correct.
 
+If the container starts but crashes with `ImportError: libX11.so.6` (or similar `dlib` shared library errors):
+- Ensure deployment uses `railpack.json` from the backend root.
+- This repository includes deploy `aptPackages` in `railpack.json` to install the required runtime libraries.
+- Trigger a fresh redeploy after pulling latest changes.
+
 **Note on `face-recognition`:**
 - If `face-recognition` fails to build on Railway, you may need to deploy in a Docker container or use a Python image with build tools pre-installed.
 - Railway supports custom Dockerfile deployments; contact Railway support if needed.

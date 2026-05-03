@@ -1,6 +1,13 @@
 {
   "$schema": "https://schema.railpack.com",
   "deploy": {
+    "aptPackages": [
+      "libx11-6",
+      "libglib2.0-0",
+      "libsm6",
+      "libxext6",
+      "libxrender1"
+    ],
     "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
   }
 }

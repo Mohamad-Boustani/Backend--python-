@@ -399,6 +399,22 @@ def create_course(payload: schemas.CourseCreate, db: Session = Depends(get_db)):
     return item
 
 
+# Debug endpoint to test database connectivity and surface errors/logs.
+@router.get("/debug/db-test")
+def debug_db_test(db: Session = Depends(get_db)):
+    try:
+        result = db.execute("SELECT 1").scalar()
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        import traceback
+
+        tb = traceback.format_exc()
+        # Print traceback to stdout so it appears in Railway logs.
+        print(tb)
+        # Return limited details to the client for debugging.
+        return {"ok": False, "error": str(exc), "traceback": tb}
+
+
 # List all sections.
 @router.get("/sections", response_model=list[schemas.SectionOut])
 def list_sections(db: Session = Depends(get_db)):

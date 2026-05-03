@@ -2,7 +2,6 @@ import io
 import json
 from datetime import date
 
-import face_recognition
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import File, Form, UploadFile
@@ -15,8 +14,21 @@ from app import models, schemas
 router = APIRouter()
 
 
+def _get_face_recognition():
+    try:
+        import face_recognition
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Face recognition is unavailable in this deployment",
+        ) from exc
+
+    return face_recognition
+
+
 # Convert one uploaded face image into a single 128-dimensional embedding.
 def _encode_face_image(image_bytes: bytes) -> list[float]:
+    face_recognition = _get_face_recognition()
     image = face_recognition.load_image_file(io.BytesIO(image_bytes))
     encodings = face_recognition.face_encodings(image)
 
@@ -41,6 +53,7 @@ def _load_encoding_vectors(raw_value: str) -> list[list[float]]:
 
 # Compare one live embedding against only the students enrolled in a section.
 def _recognize_face(candidate_encoding: list[float], db: Session, section_id: int, tolerance: float = 0.6):
+    face_recognition = _get_face_recognition()
     candidate_array = np.asarray(candidate_encoding, dtype="float64")
     best_match = None
 

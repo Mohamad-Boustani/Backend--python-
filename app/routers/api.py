@@ -5,6 +5,7 @@ from datetime import date
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import File, Form, UploadFile
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -403,7 +404,7 @@ def create_course(payload: schemas.CourseCreate, db: Session = Depends(get_db)):
 @router.get("/debug/db-test")
 def debug_db_test(db: Session = Depends(get_db)):
     try:
-        result = db.execute("SELECT 1").scalar()
+        result = db.execute(text("SELECT 1")).scalar()
         return {"ok": True, "result": result}
     except Exception as exc:
         import traceback

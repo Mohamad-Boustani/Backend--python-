@@ -399,7 +399,7 @@ def create_course(payload: schemas.CourseCreate, db: Session = Depends(get_db)):
     return item
 
 
-# Debug endpoint to test database connectivity and surface errors/logs.
+# Debug endpoint to test database connectivity and surface errors
 @router.get("/debug/db-test")
 def debug_db_test(db: Session = Depends(get_db)):
     try:

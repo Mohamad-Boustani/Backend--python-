@@ -224,3 +224,15 @@ class DashboardOut(BaseModel):
     attendance_today: int
     present_today: int
     model_config = ConfigDict(from_attributes=True)
+
+
+# Dashboard summary scoped to one instructor.
+class InstructorDashboardOut(BaseModel):
+    instructor_id: int
+    total_students: int
+    total_courses: int
+    total_sections: int
+    total_attendance_records: int
+    attendance_today: int
+    present_today: int
+    model_config = ConfigDict(from_attributes=True)

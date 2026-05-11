@@ -5,7 +5,7 @@ from datetime import date
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import File, Form, UploadFile
-from sqlalchemy import text
+from sqlalchemy import distinct, func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -253,6 +253,78 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/instructors/{instructor_id}/dashboard", response_model=schemas.InstructorDashboardOut)
+def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(get_db)):
+    instructor = (
+        db.query(models.Instructor)
+        .filter(models.Instructor.instructor_id == instructor_id)
+        .first()
+    )
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+
+    today = date.today()
+
+    total_sections = (
+        db.query(models.Section)
+        .filter(models.Section.instructor_id == instructor_id)
+        .count()
+    )
+
+    total_courses = (
+        db.query(func.count(distinct(models.Section.course_id)))
+        .filter(models.Section.instructor_id == instructor_id)
+        .scalar()
+        or 0
+    )
+
+    total_students = (
+        db.query(func.count(distinct(models.Enrollment.student_id)))
+        .join(models.Section, models.Section.section_id == models.Enrollment.section_id)
+        .filter(models.Section.instructor_id == instructor_id)
+        .scalar()
+        or 0
+    )
+
+    total_attendance_records = (
+        db.query(models.AttendanceRecord)
+        .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
+        .filter(models.Section.instructor_id == instructor_id)
+        .count()
+    )
+
+    attendance_today = (
+        db.query(models.AttendanceRecord)
+        .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
+        .filter(
+            models.Section.instructor_id == instructor_id,
+            models.AttendanceRecord.attendance_date == today,
+        )
+        .count()
+    )
+
+    present_today = (
+        db.query(models.AttendanceRecord)
+        .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
+        .filter(
+            models.Section.instructor_id == instructor_id,
+            models.AttendanceRecord.attendance_date == today,
+            models.AttendanceRecord.status == "Present",
+        )
+        .count()
+    )
+
+    return schemas.InstructorDashboardOut(
+        instructor_id=instructor_id,
+        total_students=total_students,
+        total_courses=total_courses,
+        total_sections=total_sections,
+        total_attendance_records=total_attendance_records,
+        attendance_today=attendance_today,
+        present_today=present_today,
+    )
+
+
 # List all departments.
 @router.get("/departments", response_model=list[schemas.DepartmentOut])
 def list_departments(db: Session = Depends(get_db)):
@@ -422,6 +494,24 @@ def list_sections(db: Session = Depends(get_db)):
     return db.query(models.Section).all()
 
 
+@router.get("/instructors/{instructor_id}/sections", response_model=list[schemas.SectionOut])
+def list_instructor_sections(instructor_id: int, db: Session = Depends(get_db)):
+    instructor = (
+        db.query(models.Instructor)
+        .filter(models.Instructor.instructor_id == instructor_id)
+        .first()
+    )
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+
+    return (
+        db.query(models.Section)
+        .filter(models.Section.instructor_id == instructor_id)
+        .order_by(models.Section.section_id.asc())
+        .all()
+    )
+
+
 # Create a section and validate its time order.
 @router.post("/sections", response_model=schemas.SectionOut, status_code=201)
 def create_section(payload: schemas.SectionCreate, db: Session = Depends(get_db)):
@@ -516,6 +606,45 @@ def get_attendance_history(section_id: int, db: Session = Depends(get_db)):
         .order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.record_id.desc())
         .all()
     )
+
+
+@router.get("/instructors/{instructor_id}/attendance/history", response_model=list[schemas.AttendanceRecordOut])
+def get_instructor_attendance_history(
+    instructor_id: int,
+    section_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    instructor = (
+        db.query(models.Instructor)
+        .filter(models.Instructor.instructor_id == instructor_id)
+        .first()
+    )
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+
+    query = (
+        db.query(models.AttendanceRecord)
+        .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
+        .filter(models.Section.instructor_id == instructor_id)
+    )
+
+    if section_id is not None:
+        section = (
+            db.query(models.Section)
+            .filter(
+                models.Section.section_id == section_id,
+                models.Section.instructor_id == instructor_id,
+            )
+            .first()
+        )
+        if section is None:
+            raise HTTPException(status_code=404, detail="Section not found for instructor")
+        query = query.filter(models.AttendanceRecord.section_id == section_id)
+
+    return query.order_by(
+        models.AttendanceRecord.attendance_date.desc(),
+        models.AttendanceRecord.record_id.desc(),
+    ).all()
 
 
 # Search attendance history by student name.

@@ -668,14 +668,37 @@ def create_manual_attendance_record(
 ):
     _validate_attendance_targets(db, payload.student_id, payload.section_id)
 
-    if _attendance_already_exists(db, payload.attendance_date, payload.student_id, payload.section_id):
-        raise HTTPException(status_code=400, detail="Attendance already exists for this student in this section on this date")
-
-    item = models.AttendanceRecord(
-        **payload.model_dump(),
-        confidence_score=1.0,
+    item = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.attendance_date == payload.attendance_date,
+            models.AttendanceRecord.student_id == payload.student_id,
+            models.AttendanceRecord.section_id == payload.section_id,
+        )
+        .first()
     )
-    db.add(item)
+
+    confidence_score = 1.0 if payload.status == "Present" else 0.0
+
+    if item is None:
+        item = models.AttendanceRecord(
+            attendance_date=payload.attendance_date,
+            status=payload.status,
+            confidence_score=confidence_score,
+            student_id=payload.student_id,
+            instructor_id=payload.instructor_id,
+            section_id=payload.section_id,
+            manual_override=True,
+            override_reason=payload.override_reason,
+        )
+        db.add(item)
+    else:
+        item.status = payload.status
+        item.confidence_score = confidence_score
+        item.instructor_id = payload.instructor_id
+        item.manual_override = True
+        item.override_reason = payload.override_reason
+
     _commit_or_400(db)
     db.refresh(item)
     return item
@@ -836,15 +859,25 @@ async def identify_face(
         attendance = models.AttendanceRecord(
             attendance_date=date.today(),
             status="Present",
-            confidence_score=max(0.0, min(1.0, 1.0 - float(match_result["distance"]))),
+            confidence_score=0.0,
             student_id=match_result["student_id"],
             instructor_id=section.instructor_id,
             section_id=section_id,
+            manual_override=False,
+            override_reason=None,
         )
         db.add(attendance)
         _commit_or_400(db)
         db.refresh(attendance)
         attendance_created = True
+    else:
+        attendance.status = "Present"
+        attendance.confidence_score = 0.0
+        attendance.instructor_id = section.instructor_id
+        attendance.manual_override = False
+        attendance.override_reason = None
+        _commit_or_400(db)
+        db.refresh(attendance)
 
     return schemas.FaceRecognitionResponse(
         matched=True,

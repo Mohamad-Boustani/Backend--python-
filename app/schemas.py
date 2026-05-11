@@ -131,16 +131,19 @@ class AttendanceRecordCreate(BaseModel):
 # Response model for attendance records.
 class AttendanceRecordOut(AttendanceRecordCreate):
     record_id: int
+    manual_override: bool = False
+    override_reason: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
 # Request body for a teacher-entered attendance record.
 class AttendanceRecordManualCreate(BaseModel):
-    attendance_date: date
+    attendance_date: date = Field(default_factory=date.today)
     status: Literal["Present", "Absent", "Late", "Excused"]
     student_id: int
     instructor_id: int
     section_id: int
+    override_reason: str | None = Field(default=None, max_length=255)
 
 
 # Request body for saving attendance through the unified endpoint.

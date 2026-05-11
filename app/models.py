@@ -1,6 +1,6 @@
 from datetime import date, time
 
-from sqlalchemy import CheckConstraint, Date, DECIMAL, Enum, ForeignKey, Integer, String, Text, Time
+from sqlalchemy import Boolean, CheckConstraint, Date, DECIMAL, Enum, ForeignKey, Integer, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -103,6 +103,8 @@ class AttendanceRecord(Base):
         nullable=False,
     )
     confidence_score: Mapped[float] = mapped_column("Confidence_Score", DECIMAL(5, 4), nullable=False)
+    manual_override: Mapped[bool] = mapped_column("Manual_Override", Boolean, nullable=False, default=False)
+    override_reason: Mapped[str | None] = mapped_column("Override_Reason", Text, nullable=True)
     student_id: Mapped[int] = mapped_column("Student_ID", ForeignKey("student.Student_ID"), nullable=False)
     instructor_id: Mapped[int] = mapped_column("Instructor_ID", ForeignKey("instructor.Instructor_ID"), nullable=False)
     section_id: Mapped[int] = mapped_column("Section_ID", ForeignKey("section.Section_ID"), nullable=False)

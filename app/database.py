@@ -2,7 +2,7 @@ import os
 from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Load database settings from environment variables.
@@ -58,6 +58,27 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 Base = declarative_base()
+
+
+def ensure_attendance_manual_override_columns() -> None:
+    inspector = inspect(engine)
+    if "attendance_record" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("attendance_record")}
+    statements: list[str] = []
+
+    if "Manual_Override" not in columns:
+        statements.append("ALTER TABLE attendance_record ADD COLUMN Manual_Override BOOLEAN NOT NULL DEFAULT 0")
+    if "Override_Reason" not in columns:
+        statements.append("ALTER TABLE attendance_record ADD COLUMN Override_Reason TEXT NULL")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 # Dependency helper that gives each request its own database session.

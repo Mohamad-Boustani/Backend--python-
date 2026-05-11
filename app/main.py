@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.database import ensure_attendance_manual_override_columns
 from app.routers.api import router as api_router
 
 # Load environment variables before reading configuration values.
@@ -16,6 +17,8 @@ allow_credentials = allowed_origins != ["*"]
 
 # Create the FastAPI application instance.
 app = FastAPI(title=app_name, version="1.0.0")
+
+ensure_attendance_manual_override_columns()
 
 # Add CORS so the Flutter app or browser client can call the API.
 app.add_middleware(

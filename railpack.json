@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.railpack.com",
   "deploy": {
+    "runtime": "python-3.11",
     "aptPackages": [
       "libx11-6",
       "libglib2.0-0",

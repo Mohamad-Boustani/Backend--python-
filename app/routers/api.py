@@ -878,3 +878,22 @@ def create_enrollment(payload: schemas.EnrollmentCreate, db: Session = Depends(g
     _commit_or_400(db)
     db.refresh(item)
     return item
+
+
+# Delete a student-to-section enrollment using the composite key.
+@router.delete("/enrollments/{student_id}/{section_id}", status_code=204)
+def delete_enrollment(student_id: int, section_id: int, db: Session = Depends(get_db)):
+    item = (
+        db.query(models.Enrollment)
+        .filter(
+            models.Enrollment.student_id == student_id,
+            models.Enrollment.section_id == section_id,
+        )
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+
+    db.delete(item)
+    _commit_or_400(db)
+    return None

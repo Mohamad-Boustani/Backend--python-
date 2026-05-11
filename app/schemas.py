@@ -206,6 +206,7 @@ class EnrollmentCreate(BaseModel):
 
 # Response model for enrollment records.
 class EnrollmentOut(EnrollmentCreate):
+    enrollment_id: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
 

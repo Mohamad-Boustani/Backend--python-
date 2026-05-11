@@ -704,6 +704,23 @@ def create_manual_attendance_record(
     return item
 
 
+# Delete attendance record by ID
+@router.delete("/attendance-records/{record_id}", status_code=204)
+def delete_attendance_by_id(
+    record_id: int,
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.record_id == record_id
+    ).first()
+
+    if item is None:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    db.delete(item)
+    _commit_or_400(db)
+
+
 # Delete attendance record for a student on a specific date
 @router.delete("/attendance-records/{student_id}/{section_id}/{attendance_date}", status_code=204)
 def delete_attendance_record(

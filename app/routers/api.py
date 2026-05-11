@@ -704,6 +704,37 @@ def create_manual_attendance_record(
     return item
 
 
+# Delete attendance record for a student on a specific date
+@router.delete("/attendance-records/{student_id}/{section_id}/{attendance_date}", status_code=204)
+def delete_attendance_record(
+    student_id: int,
+    section_id: int,
+    attendance_date: str,
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime
+    try:
+        record_date = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    item = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.attendance_date == record_date,
+            models.AttendanceRecord.student_id == student_id,
+            models.AttendanceRecord.section_id == section_id,
+        )
+        .first()
+    )
+
+    if item is None:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    db.delete(item)
+    _commit_or_400(db)
+
+
 # List saved face templates.
 @router.get("/face-templates", response_model=list[schemas.FaceTemplateOut])
 def list_face_templates(db: Session = Depends(get_db)):

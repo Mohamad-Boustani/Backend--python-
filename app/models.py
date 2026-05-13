@@ -44,6 +44,7 @@ class Student(Base):
     full_name: Mapped[str] = mapped_column("Full_Name", String(100), nullable=False)
     university_email: Mapped[str] = mapped_column("University_Email", String(100), nullable=False, unique=True)
     phone_number: Mapped[str | None] = mapped_column("Phone_Number", String(20), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
     major_id: Mapped[int] = mapped_column("Major_ID", ForeignKey("major.Major_ID"), nullable=False)
 
     major = relationship("Major")
@@ -121,6 +122,7 @@ class FaceTemplate(Base):
 
     template_id: Mapped[int] = mapped_column("Template_ID", Integer, primary_key=True, index=True)
     last_updated: Mapped[date] = mapped_column("Last_Updated", Date, nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
     student_id: Mapped[int] = mapped_column("Student_ID", ForeignKey("student.Student_ID"), nullable=False, unique=True)
 
     student = relationship("Student")
@@ -144,6 +146,7 @@ class Enrollment(Base):
 
     student_id: Mapped[int] = mapped_column("Student_ID", ForeignKey("student.Student_ID"), primary_key=True)
     section_id: Mapped[int] = mapped_column("Section_ID", ForeignKey("section.Section_ID"), primary_key=True)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
     student = relationship("Student")
     section = relationship("Section")

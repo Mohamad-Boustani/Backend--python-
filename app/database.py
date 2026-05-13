@@ -62,25 +62,37 @@ Base = declarative_base()
 
 def ensure_attendance_manual_override_columns() -> None:
     inspector = inspect(engine)
-    if "attendance_record" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("attendance_record")}
+    table_names = set(inspector.get_table_names())
     statements: list[str] = []
 
-    if "Manual_Override" not in columns:
-        statements.append("ALTER TABLE attendance_record ADD COLUMN Manual_Override BOOLEAN NOT NULL DEFAULT 0")
-    if "Override_Reason" not in columns:
-        statements.append("ALTER TABLE attendance_record ADD COLUMN Override_Reason TEXT NULL")
-    if "Archived_At" not in columns:
-        statements.append("ALTER TABLE attendance_record ADD COLUMN Archived_At DATETIME NULL")
+    if "attendance_record" in table_names:
+        attendance_columns = {column["name"] for column in inspector.get_columns("attendance_record")}
+        if "Manual_Override" not in attendance_columns:
+            statements.append("ALTER TABLE attendance_record ADD COLUMN Manual_Override BOOLEAN NOT NULL DEFAULT 0")
+        if "Override_Reason" not in attendance_columns:
+            statements.append("ALTER TABLE attendance_record ADD COLUMN Override_Reason TEXT NULL")
+        if "Archived_At" not in attendance_columns:
+            statements.append("ALTER TABLE attendance_record ADD COLUMN Archived_At DATETIME NULL")
 
-    if not statements:
-        return
+    if "student" in table_names:
+        student_columns = {column["name"] for column in inspector.get_columns("student")}
+        if "Archived_At" not in student_columns:
+            statements.append("ALTER TABLE student ADD COLUMN Archived_At DATETIME NULL")
 
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.execute(text(statement))
+    if "enrollment" in table_names:
+        enrollment_columns = {column["name"] for column in inspector.get_columns("enrollment")}
+        if "Archived_At" not in enrollment_columns:
+            statements.append("ALTER TABLE enrollment ADD COLUMN Archived_At DATETIME NULL")
+
+    if "face_template" in table_names:
+        template_columns = {column["name"] for column in inspector.get_columns("face_template")}
+        if "Archived_At" not in template_columns:
+            statements.append("ALTER TABLE face_template ADD COLUMN Archived_At DATETIME NULL")
+
+    if statements:
+        with engine.begin() as connection:
+            for statement in statements:
+                connection.execute(text(statement))
 
 
 # Dependency helper that gives each request its own database session.

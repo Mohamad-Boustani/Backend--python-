@@ -60,7 +60,16 @@ def _recognize_face(candidate_encoding: list[float], db: Session, section_id: in
 
     enrolled_student_ids = [
         enrollment.student_id
-        for enrollment in db.query(models.Enrollment).filter(models.Enrollment.section_id == section_id).all()
+        for enrollment in (
+            db.query(models.Enrollment)
+            .join(models.Student, models.Student.student_id == models.Enrollment.student_id)
+            .filter(
+                models.Enrollment.section_id == section_id,
+                models.Enrollment.archived_at.is_(None),
+                models.Student.archived_at.is_(None),
+            )
+            .all()
+        )
     ]
 
     if not enrolled_student_ids:
@@ -68,7 +77,12 @@ def _recognize_face(candidate_encoding: list[float], db: Session, section_id: in
 
     for template in (
         db.query(models.FaceTemplate)
+        .join(models.Student, models.Student.student_id == models.FaceTemplate.student_id)
         .filter(models.FaceTemplate.student_id.in_(enrolled_student_ids))
+        .filter(
+            models.FaceTemplate.archived_at.is_(None),
+            models.Student.archived_at.is_(None),
+        )
         .all()
     ):
         template_vector = (
@@ -115,7 +129,14 @@ def _get_section_context(db: Session, section_id: int):
 
 # Find a student by primary key so update and delete can share the same 404 behavior.
 def _get_student_context(db: Session, student_id: int):
-    student = db.query(models.Student).filter(models.Student.student_id == student_id).first()
+    student = (
+        db.query(models.Student)
+        .filter(
+            models.Student.student_id == student_id,
+            models.Student.archived_at.is_(None),
+        )
+        .first()
+    )
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
@@ -131,7 +152,14 @@ def _get_admin_profile(db: Session):
 
 # Validate the student, section, and enrollment required for attendance writes.
 def _validate_attendance_targets(db: Session, student_id: int, section_id: int):
-    student = db.query(models.Student).filter(models.Student.student_id == student_id).first()
+    student = (
+        db.query(models.Student)
+        .filter(
+            models.Student.student_id == student_id,
+            models.Student.archived_at.is_(None),
+        )
+        .first()
+    )
     if student is None:
         raise HTTPException(status_code=404, detail="Student not found")
 
@@ -141,6 +169,7 @@ def _validate_attendance_targets(db: Session, student_id: int, section_id: int):
         .filter(
             models.Enrollment.student_id == student_id,
             models.Enrollment.section_id == section_id,
+            models.Enrollment.archived_at.is_(None),
         )
         .first()
         is not None
@@ -155,13 +184,37 @@ def _validate_attendance_targets(db: Session, student_id: int, section_id: int):
 def _student_has_dependencies(db: Session, student_id: int) -> list[str]:
     dependencies: list[str] = []
 
-    if db.query(models.Enrollment).filter(models.Enrollment.student_id == student_id).first() is not None:
+    if (
+        db.query(models.Enrollment)
+        .filter(
+            models.Enrollment.student_id == student_id,
+            models.Enrollment.archived_at.is_(None),
+        )
+        .first()
+        is not None
+    ):
         dependencies.append("enrollments")
 
-    if db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == student_id).first() is not None:
+    if (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.student_id == student_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        )
+        .first()
+        is not None
+    ):
         dependencies.append("attendance records")
 
-    if db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first() is not None:
+    if (
+        db.query(models.FaceTemplate)
+        .filter(
+            models.FaceTemplate.student_id == student_id,
+            models.FaceTemplate.archived_at.is_(None),
+        )
+        .first()
+        is not None
+    ):
         dependencies.append("face templates")
 
     return dependencies
@@ -294,7 +347,9 @@ def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(g
     total_students = (
         db.query(func.count(distinct(models.Enrollment.student_id)))
         .join(models.Section, models.Section.section_id == models.Enrollment.section_id)
+        .join(models.Student, models.Student.student_id == models.Enrollment.student_id)
         .filter(models.Section.instructor_id == instructor_id)
+        .filter(models.Enrollment.archived_at.is_(None), models.Student.archived_at.is_(None))
         .scalar()
         or 0
     )
@@ -394,7 +449,7 @@ def create_instructor(payload: schemas.InstructorCreate, db: Session = Depends(g
 # List all students.
 @router.get("/students", response_model=list[schemas.StudentOut])
 def list_students(db: Session = Depends(get_db)):
-    return db.query(models.Student).all()
+    return db.query(models.Student).filter(models.Student.archived_at.is_(None)).all()
 
 
 # Search students by name.
@@ -402,7 +457,10 @@ def list_students(db: Session = Depends(get_db)):
 def search_students(name: str, db: Session = Depends(get_db)):
     return (
         db.query(models.Student)
-        .filter(models.Student.full_name.ilike(f"%{name}%"))
+        .filter(
+            models.Student.full_name.ilike(f"%{name}%"),
+            models.Student.archived_at.is_(None),
+        )
         .all()
     )
 
@@ -445,15 +503,24 @@ def update_student(student_id: int, payload: schemas.StudentUpdate, db: Session 
 def delete_student(student_id: int, db: Session = Depends(get_db)):
     student = _get_student_context(db, student_id)
 
-    dependencies = _student_has_dependencies(db, student_id)
-    if dependencies:
-        dependency_list = ", ".join(dependencies)
-        raise HTTPException(
-            status_code=409,
-            detail=f"Student cannot be deleted because related {dependency_list} still exist",
-        )
+    archived_at = datetime.utcnow()
+    student.archived_at = archived_at
 
-    db.delete(student)
+    db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id == student_id,
+        models.AttendanceRecord.archived_at.is_(None),
+    ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+
+    db.query(models.Enrollment).filter(
+        models.Enrollment.student_id == student_id,
+        models.Enrollment.archived_at.is_(None),
+    ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+
+    db.query(models.FaceTemplate).filter(
+        models.FaceTemplate.student_id == student_id,
+        models.FaceTemplate.archived_at.is_(None),
+    ).update({models.FaceTemplate.archived_at: archived_at}, synchronize_session=False)
+
     _commit_or_400(db)
     return student
 
@@ -550,7 +617,11 @@ def list_section_students(section_id: int, db: Session = Depends(get_db)):
     return (
         db.query(models.Student)
         .join(models.Enrollment, models.Student.student_id == models.Enrollment.student_id)
-        .filter(models.Enrollment.section_id == section_id)
+        .filter(
+            models.Enrollment.section_id == section_id,
+            models.Enrollment.archived_at.is_(None),
+            models.Student.archived_at.is_(None),
+        )
         .order_by(models.Student.full_name.asc())
         .all()
     )
@@ -828,14 +899,21 @@ def restore_attendance_record(student_id: int, section_id: int, attendance_date:
 # List saved face templates.
 @router.get("/face-templates", response_model=list[schemas.FaceTemplateOut])
 def list_face_templates(db: Session = Depends(get_db)):
-    return db.query(models.FaceTemplate).all()
+    return db.query(models.FaceTemplate).filter(models.FaceTemplate.archived_at.is_(None)).all()
 
 
 # Create a face template record.
 @router.post("/face-templates", response_model=schemas.FaceTemplateOut, status_code=201)
 def create_face_template(payload: schemas.FaceTemplateCreate, db: Session = Depends(get_db)):
-    item = models.FaceTemplate(**payload.model_dump())
-    db.add(item)
+    _get_student_context(db, payload.student_id)
+
+    item = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == payload.student_id).first()
+    if item is None:
+        item = models.FaceTemplate(**payload.model_dump())
+        db.add(item)
+    else:
+        item.last_updated = payload.last_updated
+        item.archived_at = None
     _commit_or_400(db)
     db.refresh(item)
     return item
@@ -864,16 +942,28 @@ async def register_face(
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    _get_student_context(db, student_id)
+
     image_bytes = await image.read()
     encoding_vector = _encode_face_image(image_bytes)
 
-    template = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first()
+    template = (
+        db.query(models.FaceTemplate)
+        .filter(
+            models.FaceTemplate.student_id == student_id,
+            models.FaceTemplate.archived_at.is_(None),
+        )
+        .first()
+    )
+    if template is None:
+        template = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first()
     if template is None:
         template = models.FaceTemplate(last_updated=date.today(), student_id=student_id)
         db.add(template)
         db.flush()
     else:
         template.last_updated = date.today()
+        template.archived_at = None
 
     vector_json = json.dumps([encoding_vector])
     template_vector = (
@@ -905,6 +995,8 @@ async def create_face_template_encoding(
     images: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ):
+    _get_student_context(db, student_id)
+
     if len(images) < 3 or len(images) > 4:
         raise HTTPException(status_code=400, detail="Upload 3 to 4 face images for enrollment")
 
@@ -913,13 +1005,23 @@ async def create_face_template_encoding(
         image_bytes = await image.read()
         encoding_vectors.append(_encode_face_image(image_bytes))
 
-    template = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first()
+    template = (
+        db.query(models.FaceTemplate)
+        .filter(
+            models.FaceTemplate.student_id == student_id,
+            models.FaceTemplate.archived_at.is_(None),
+        )
+        .first()
+    )
+    if template is None:
+        template = db.query(models.FaceTemplate).filter(models.FaceTemplate.student_id == student_id).first()
     if template is None:
         template = models.FaceTemplate(last_updated=date.today(), student_id=student_id)
         db.add(template)
         db.flush()
     else:
         template.last_updated = date.today()
+        template.archived_at = None
 
     vector_json = json.dumps(encoding_vectors)
     template_vector = (
@@ -1022,14 +1124,28 @@ def get_admin_profile(db: Session = Depends(get_db)):
 # List student-to-section enrollments.
 @router.get("/enrollments", response_model=list[schemas.EnrollmentOut])
 def list_enrollments(db: Session = Depends(get_db)):
-    return db.query(models.Enrollment).all()
+    return db.query(models.Enrollment).filter(models.Enrollment.archived_at.is_(None)).all()
 
 
 # Create a student-to-section enrollment.
 @router.post("/enrollments", response_model=schemas.EnrollmentOut, status_code=201)
 def create_enrollment(payload: schemas.EnrollmentCreate, db: Session = Depends(get_db)):
-    item = models.Enrollment(**payload.model_dump())
-    db.add(item)
+    _get_student_context(db, payload.student_id)
+    _get_section_context(db, payload.section_id)
+
+    item = (
+        db.query(models.Enrollment)
+        .filter(
+            models.Enrollment.student_id == payload.student_id,
+            models.Enrollment.section_id == payload.section_id,
+        )
+        .first()
+    )
+    if item is None:
+        item = models.Enrollment(**payload.model_dump())
+        db.add(item)
+    else:
+        item.archived_at = None
     _commit_or_400(db)
     db.refresh(item)
     return item
@@ -1043,12 +1159,13 @@ def delete_enrollment(student_id: int, section_id: int, db: Session = Depends(ge
         .filter(
             models.Enrollment.student_id == student_id,
             models.Enrollment.section_id == section_id,
+            models.Enrollment.archived_at.is_(None),
         )
         .first()
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
-    db.delete(item)
+    item.archived_at = datetime.utcnow()
     _commit_or_400(db)
     return None

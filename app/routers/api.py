@@ -717,7 +717,7 @@ def create_manual_attendance_record(
             student_id=payload.student_id,
             instructor_id=payload.instructor_id,
             section_id=payload.section_id,
-            manual_override=True,
+            manual_override=bool(payload.override_reason),
             override_reason=payload.override_reason,
         )
         db.add(item)
@@ -725,7 +725,7 @@ def create_manual_attendance_record(
         item.status = payload.status
         item.confidence_score = confidence_score
         item.instructor_id = payload.instructor_id
-        item.manual_override = True
+        item.manual_override = bool(payload.override_reason)
         item.override_reason = payload.override_reason
 
     _commit_or_400(db)

@@ -1,6 +1,6 @@
 import io
 import json
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -175,6 +175,7 @@ def _attendance_already_exists(db: Session, attendance_date: date, student_id: i
             models.AttendanceRecord.attendance_date == attendance_date,
             models.AttendanceRecord.student_id == student_id,
             models.AttendanceRecord.section_id == section_id,
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .first()
     )
@@ -226,13 +227,25 @@ def login_admin(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 def get_dashboard_summary(db: Session = Depends(get_db)):
     today = date.today()
 
-    total_attendance_records = db.query(models.AttendanceRecord).count()
-    attendance_today = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.attendance_date == today).count()
+    total_attendance_records = (
+        db.query(models.AttendanceRecord)
+        .filter(models.AttendanceRecord.archived_at.is_(None))
+        .count()
+    )
+    attendance_today = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.attendance_date == today,
+            models.AttendanceRecord.archived_at.is_(None),
+        )
+        .count()
+    )
     present_today = (
         db.query(models.AttendanceRecord)
         .filter(
             models.AttendanceRecord.attendance_date == today,
             models.AttendanceRecord.status == "Present",
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .count()
     )
@@ -289,7 +302,10 @@ def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(g
     total_attendance_records = (
         db.query(models.AttendanceRecord)
         .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
-        .filter(models.Section.instructor_id == instructor_id)
+        .filter(
+            models.Section.instructor_id == instructor_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        )
         .count()
     )
 
@@ -299,6 +315,7 @@ def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(g
         .filter(
             models.Section.instructor_id == instructor_id,
             models.AttendanceRecord.attendance_date == today,
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .count()
     )
@@ -310,6 +327,7 @@ def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(g
             models.Section.instructor_id == instructor_id,
             models.AttendanceRecord.attendance_date == today,
             models.AttendanceRecord.status == "Present",
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .count()
     )
@@ -541,7 +559,7 @@ def list_section_students(section_id: int, db: Session = Depends(get_db)):
 # List attendance records.
 @router.get("/attendance-records", response_model=list[schemas.AttendanceRecordOut])
 def list_attendance_records(db: Session = Depends(get_db)):
-    return db.query(models.AttendanceRecord).all()
+    return db.query(models.AttendanceRecord).filter(models.AttendanceRecord.archived_at.is_(None)).all()
 
 
 # Create an attendance record.
@@ -590,6 +608,7 @@ def get_attendance_for_class(
         .filter(
             models.AttendanceRecord.section_id == section_id,
             models.AttendanceRecord.attendance_date == attendance_date,
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .order_by(models.AttendanceRecord.record_id.asc())
         .all()
@@ -602,7 +621,10 @@ def get_attendance_history(section_id: int, db: Session = Depends(get_db)):
     _get_section_context(db, section_id)
     return (
         db.query(models.AttendanceRecord)
-        .filter(models.AttendanceRecord.section_id == section_id)
+        .filter(
+            models.AttendanceRecord.section_id == section_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        )
         .order_by(models.AttendanceRecord.attendance_date.desc(), models.AttendanceRecord.record_id.desc())
         .all()
     )
@@ -625,7 +647,10 @@ def get_instructor_attendance_history(
     query = (
         db.query(models.AttendanceRecord)
         .join(models.Section, models.Section.section_id == models.AttendanceRecord.section_id)
-        .filter(models.Section.instructor_id == instructor_id)
+        .filter(
+            models.Section.instructor_id == instructor_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        )
     )
 
     if section_id is not None:
@@ -653,7 +678,10 @@ def search_attendance_history(name: str, section_id: int | None = None, db: Sess
     query = (
         db.query(models.AttendanceRecord)
         .join(models.Student, models.Student.student_id == models.AttendanceRecord.student_id)
-        .filter(models.Student.full_name.ilike(f"%{name}%"))
+        .filter(
+            models.Student.full_name.ilike(f"%{name}%"),
+            models.AttendanceRecord.archived_at.is_(None),
+        )
     )
     if section_id is not None:
         query = query.filter(models.AttendanceRecord.section_id == section_id)
@@ -674,6 +702,7 @@ def create_manual_attendance_record(
             models.AttendanceRecord.attendance_date == payload.attendance_date,
             models.AttendanceRecord.student_id == payload.student_id,
             models.AttendanceRecord.section_id == payload.section_id,
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .first()
     )
@@ -704,7 +733,7 @@ def create_manual_attendance_record(
     return item
 
 
-# Delete attendance record by ID
+# Archive attendance record by ID
 @router.delete("/attendance-records/{record_id}", status_code=204)
 def delete_attendance_by_id(
     record_id: int,
@@ -717,11 +746,12 @@ def delete_attendance_by_id(
     if item is None:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
-    db.delete(item)
+    if item.archived_at is None:
+        item.archived_at = datetime.utcnow()
     _commit_or_400(db)
 
 
-# Delete attendance record for a student on a specific date
+# Archive attendance record for a student on a specific date
 @router.delete("/attendance-records/{student_id}/{section_id}/{attendance_date}", status_code=204)
 def delete_attendance_record(
     student_id: int,
@@ -741,6 +771,7 @@ def delete_attendance_record(
             models.AttendanceRecord.attendance_date == record_date,
             models.AttendanceRecord.student_id == student_id,
             models.AttendanceRecord.section_id == section_id,
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .first()
     )
@@ -748,8 +779,50 @@ def delete_attendance_record(
     if item is None:
         raise HTTPException(status_code=404, detail="Attendance record not found")
 
-    db.delete(item)
+    if item.archived_at is None:
+        item.archived_at = datetime.utcnow()
     _commit_or_400(db)
+
+
+@router.post("/attendance-records/{record_id}/restore", response_model=schemas.AttendanceRecordOut)
+def restore_attendance_by_id(record_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.record_id == record_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    item.archived_at = None
+    _commit_or_400(db)
+    db.refresh(item)
+    return item
+
+
+@router.post("/attendance-records/{student_id}/{section_id}/{attendance_date}/restore", response_model=schemas.AttendanceRecordOut)
+def restore_attendance_record(student_id: int, section_id: int, attendance_date: str, db: Session = Depends(get_db)):
+    from datetime import datetime as dt
+
+    try:
+        record_date = dt.strptime(attendance_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    item = (
+        db.query(models.AttendanceRecord)
+        .filter(
+            models.AttendanceRecord.attendance_date == record_date,
+            models.AttendanceRecord.student_id == student_id,
+            models.AttendanceRecord.section_id == section_id,
+        )
+        .order_by(models.AttendanceRecord.record_id.desc())
+        .first()
+    )
+
+    if item is None:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    item.archived_at = None
+    _commit_or_400(db)
+    db.refresh(item)
+    return item
 
 
 # List saved face templates.
@@ -898,6 +971,7 @@ async def identify_face(
             models.AttendanceRecord.attendance_date == date.today(),
             models.AttendanceRecord.section_id == section_id,
             models.AttendanceRecord.student_id == match_result["student_id"],
+            models.AttendanceRecord.archived_at.is_(None),
         )
         .first()
     )

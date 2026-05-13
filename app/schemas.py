@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Literal
 
@@ -133,6 +133,7 @@ class AttendanceRecordOut(AttendanceRecordCreate):
     record_id: int
     manual_override: bool = False
     override_reason: str | None = None
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 

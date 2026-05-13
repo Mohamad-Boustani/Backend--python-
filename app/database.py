@@ -72,6 +72,8 @@ def ensure_attendance_manual_override_columns() -> None:
         statements.append("ALTER TABLE attendance_record ADD COLUMN Manual_Override BOOLEAN NOT NULL DEFAULT 0")
     if "Override_Reason" not in columns:
         statements.append("ALTER TABLE attendance_record ADD COLUMN Override_Reason TEXT NULL")
+    if "Archived_At" not in columns:
+        statements.append("ALTER TABLE attendance_record ADD COLUMN Archived_At DATETIME NULL")
 
     if not statements:
         return

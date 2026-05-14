@@ -1,19 +1,29 @@
-# Senior Project Backend (Python)
+# AI Attendance Backend
 
-This backend is built from the schema in `Other Files/AI_Attendance.sql`.
-It provides REST APIs that are ready for Flutter apps through JSON over HTTP.
+FastAPI backend for the AI Attendance System. It exposes JSON REST endpoints for attendance, face recognition, students, enrollments, and admin management.
 
-Note: the backend is configured to use an existing database schema and does not auto-create tables on startup.
+## Features
 
-## Stack
+- Face template encoding and recognition with `face_recognition`
+- Attendance capture and manual override support
+- Soft-delete archive flow for students and admin-managed records
+- REST API designed for the Flutter frontend
 
-- FastAPI (REST API)
-- SQLAlchemy (ORM)
-- MySQL support via PyMySQL
-- Uvicorn (ASGI server)
-- face_recognition for face embeddings
+## Tech Stack
 
-## Quick Start
+- FastAPI
+- SQLAlchemy 2.x
+- MySQL / MariaDB via PyMySQL
+- Uvicorn
+- numpy, Pillow, python-multipart
+
+## Requirements
+
+- Python 3.10+
+- A MySQL database with the attendance schema
+- `face_recognition` native dependencies installed on your machine
+
+## Setup
 
 1. Install dependencies:
 
@@ -21,33 +31,65 @@ Note: the backend is configured to use an existing database schema and does not 
 pip install -r requirements.txt
 ```
 
-2. Create `.env` from `.env.example` and update `DATABASE_URL`.
+2. Create a `.env` file in `Backend (python)/` and set your database connection:
 
-3. Run the API:
+```env
+DATABASE_URL=mysql+pymysql://user:password@host:3306/database_name
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
+3. Start the API:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-4. Open docs:
+4. Open the interactive docs:
 
 - Swagger UI: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
-## Face Encoding
+## API Base
 
-Use `POST /api/v1/face-templates/encode` with `student_id` and 3 to 4 uploaded face images. The backend will:
+All routes are mounted under:
 
-- detect a single face in each image
-- convert each one to a 128-dimensional embedding vector using `face_recognition`
-- store all vectors in the database for later matching
+```text
+/api/v1
+```
 
-To identify a student during class session start, use `POST /api/v1/face-recognition/identify` with `section_id` and one live face image. The backend compares that face only against students enrolled in that section, then writes an attendance record when a match is found.
+## Common Workflows
 
-If the AI does not recognize a student, the teacher can manually submit attendance with `POST /api/v1/attendance-records/manual`. That route stores the record with a default confidence score of `1.0` because it was entered by the teacher.
+### Encode face images
 
-## Flutter Compatibility
+`POST /api/v1/face-templates/encode`
 
-- CORS is enabled and configurable with `ALLOWED_ORIGINS`.
-- All endpoints return JSON.
-- Base API path is `/api/v1`.
+Upload 3 to 4 images for one student. The backend:
+
+- detects a single face in each image
+- converts each face to a 128-dimensional embedding
+- stores the encoding vectors for later matching
+
+### Recognize a student
+
+`POST /api/v1/face-recognition/identify`
+
+Send a live image plus the section ID. The backend only compares against active students enrolled in that section.
+
+### Manual attendance
+
+`POST /api/v1/attendance-records/manual`
+
+Use this when the teacher records attendance directly.
+
+## Archive Behavior
+
+This project now uses archive-style deletes instead of hard deletes for supported records.
+
+- Archived rows are hidden from normal list endpoints.
+- Archiving a student also archives related attendance, enrollments, and face templates.
+- Archiving admin setup data cascades to dependent sections, enrollments, and attendance where applicable.
+
+## Notes
+
+- The backend uses an existing database schema and adds missing archive columns at startup when needed.
+- Make sure the Flutter frontend points to the same API base URL used by your deployment.

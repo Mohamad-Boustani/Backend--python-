@@ -79,6 +79,38 @@ def ensure_attendance_manual_override_columns() -> None:
         if "Archived_At" not in student_columns:
             statements.append("ALTER TABLE student ADD COLUMN Archived_At DATETIME NULL")
 
+    if "department" in table_names or "departments" in table_names:
+        # support both possible table naming
+        name = "departments" if "departments" in table_names else "department"
+        dept_columns = {column["name"] for column in inspector.get_columns(name)}
+        if "Archived_At" not in dept_columns:
+            statements.append(f"ALTER TABLE {name} ADD COLUMN Archived_At DATETIME NULL")
+
+    if "major" in table_names:
+        major_columns = {column["name"] for column in inspector.get_columns("major")}
+        if "Archived_At" not in major_columns:
+            statements.append("ALTER TABLE major ADD COLUMN Archived_At DATETIME NULL")
+
+    if "course" in table_names:
+        course_columns = {column["name"] for column in inspector.get_columns("course")}
+        if "Archived_At" not in course_columns:
+            statements.append("ALTER TABLE course ADD COLUMN Archived_At DATETIME NULL")
+
+    if "section" in table_names:
+        section_columns = {column["name"] for column in inspector.get_columns("section")}
+        if "Archived_At" not in section_columns:
+            statements.append("ALTER TABLE section ADD COLUMN Archived_At DATETIME NULL")
+
+    if "instructor" in table_names:
+        instr_columns = {column["name"] for column in inspector.get_columns("instructor")}
+        if "Archived_At" not in instr_columns:
+            statements.append("ALTER TABLE instructor ADD COLUMN Archived_At DATETIME NULL")
+
+    if "admin" in table_names:
+        admin_columns = {column["name"] for column in inspector.get_columns("admin")}
+        if "Archived_At" not in admin_columns:
+            statements.append("ALTER TABLE admin ADD COLUMN Archived_At DATETIME NULL")
+
     if "enrollment" in table_names:
         enrollment_columns = {column["name"] for column in inspector.get_columns("enrollment")}
         if "Archived_At" not in enrollment_columns:

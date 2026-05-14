@@ -13,6 +13,7 @@ class DepartmentCreate(BaseModel):
 # Response model for department data.
 class DepartmentOut(DepartmentCreate):
     department_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -24,6 +25,7 @@ class MajorCreate(BaseModel):
 # Response model for major data.
 class MajorOut(MajorCreate):
     major_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -37,6 +39,7 @@ class InstructorCreate(BaseModel):
 # Response model for instructor data.
 class InstructorOut(InstructorCreate):
     instructor_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -59,6 +62,7 @@ class StudentUpdate(BaseModel):
 # Response model for student data.
 class StudentOut(StudentCreate):
     student_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -72,6 +76,7 @@ class AdminCreate(BaseModel):
 # Response model for admin data.
 class AdminOut(AdminCreate):
     admin_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -98,6 +103,7 @@ class CourseCreate(BaseModel):
 # Response model for course data.
 class CourseOut(CourseCreate):
     course_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -115,6 +121,7 @@ class SectionCreate(BaseModel):
 # Response model for section data.
 class SectionOut(SectionCreate):
     section_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -166,6 +173,7 @@ class FaceTemplateCreate(BaseModel):
 # Response model for a face template.
 class FaceTemplateOut(FaceTemplateCreate):
     template_id: int
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -211,6 +219,7 @@ class EnrollmentCreate(BaseModel):
 # Response model for enrollment records.
 class EnrollmentOut(EnrollmentCreate):
     enrollment_id: int | None = None
+    archived_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 

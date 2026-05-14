@@ -12,6 +12,7 @@ class Department(Base):
 
     department_id: Mapped[int] = mapped_column("Department_ID", Integer, primary_key=True, index=True)
     department_name: Mapped[str] = mapped_column("Department_Name", String(50), nullable=False, unique=True)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
 
 # Instructor table for teaching staff.
@@ -24,6 +25,7 @@ class Instructor(Base):
     department_id: Mapped[int] = mapped_column(
         "Department_ID", ForeignKey("departments.Department_ID"), nullable=False
     )
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
     department = relationship("Department")
 
@@ -34,6 +36,7 @@ class Major(Base):
 
     major_id: Mapped[int] = mapped_column("Major_ID", Integer, primary_key=True, index=True)
     major_name: Mapped[str] = mapped_column("Major_Name", String(50), nullable=False, unique=True)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
 
 # Student table for enrolled learners.
@@ -58,6 +61,7 @@ class Admin(Base):
     admin_email: Mapped[str] = mapped_column("Admin_Email", String(100), nullable=False, unique=True)
     full_name: Mapped[str] = mapped_column("Full_Name", String(100), nullable=False)
     privilege_level: Mapped[str] = mapped_column("Privilege_Level", String(20), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
 
 # Course table for subject metadata.
@@ -69,6 +73,7 @@ class Course(Base):
     course_name: Mapped[str] = mapped_column("Course_Name", String(100), nullable=False)
     credits: Mapped[int] = mapped_column("Credits", Integer, nullable=False)
     description: Mapped[str] = mapped_column("Description", String(500), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
 
 # Section table for scheduled class offerings.
@@ -84,6 +89,7 @@ class Section(Base):
     end_time: Mapped[time] = mapped_column("End_Time", Time, nullable=False)
     instructor_id: Mapped[int] = mapped_column("Instructor_ID", ForeignKey("instructor.Instructor_ID"), nullable=False)
     course_id: Mapped[int] = mapped_column("Course_ID", ForeignKey("course.Course_ID"), nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column("Archived_At", DateTime, nullable=True)
 
     instructor = relationship("Instructor")
     course = relationship("Course")

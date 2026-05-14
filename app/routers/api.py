@@ -401,7 +401,7 @@ def get_instructor_dashboard_summary(instructor_id: int, db: Session = Depends(g
 # List all departments.
 @router.get("/departments", response_model=list[schemas.DepartmentOut])
 def list_departments(db: Session = Depends(get_db)):
-    return db.query(models.Department).all()
+    return db.query(models.Department).filter(models.Department.archived_at.is_(None)).all()
 
 
 # Create a department.
@@ -417,7 +417,7 @@ def create_department(payload: schemas.DepartmentCreate, db: Session = Depends(g
 # List all majors.
 @router.get("/majors", response_model=list[schemas.MajorOut])
 def list_majors(db: Session = Depends(get_db)):
-    return db.query(models.Major).all()
+    return db.query(models.Major).filter(models.Major.archived_at.is_(None)).all()
 
 
 # Create a major.
@@ -433,7 +433,7 @@ def create_major(payload: schemas.MajorCreate, db: Session = Depends(get_db)):
 # List all instructors.
 @router.get("/instructors", response_model=list[schemas.InstructorOut])
 def list_instructors(db: Session = Depends(get_db)):
-    return db.query(models.Instructor).all()
+    return db.query(models.Instructor).filter(models.Instructor.archived_at.is_(None)).all()
 
 
 # Create an instructor.
@@ -525,10 +525,157 @@ def delete_student(student_id: int, db: Session = Depends(get_db)):
     return student
 
 
+# Archive a section and cascade to enrollments and attendance
+@router.delete("/sections/{section_id}", response_model=schemas.SectionOut)
+def delete_section(section_id: int, db: Session = Depends(get_db)):
+    section = db.query(models.Section).filter(models.Section.section_id == section_id, models.Section.archived_at.is_(None)).first()
+    if section is None:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    archived_at = datetime.utcnow()
+    section.archived_at = archived_at
+
+    db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.section_id == section_id,
+        models.AttendanceRecord.archived_at.is_(None),
+    ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+
+    db.query(models.Enrollment).filter(
+        models.Enrollment.section_id == section_id,
+        models.Enrollment.archived_at.is_(None),
+    ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+
+    _commit_or_400(db)
+    return section
+
+
+# Archive a course and cascade to sections -> enrollments/attendance
+@router.delete("/courses/{course_id}", response_model=schemas.CourseOut)
+def delete_course(course_id: int, db: Session = Depends(get_db)):
+    course = db.query(models.Course).filter(models.Course.course_id == course_id, models.Course.archived_at.is_(None)).first()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    archived_at = datetime.utcnow()
+    course.archived_at = archived_at
+
+    sections = db.query(models.Section).filter(models.Section.course_id == course_id, models.Section.archived_at.is_(None)).all()
+    for section in sections:
+        section.archived_at = archived_at
+        db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.section_id == section.section_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+        db.query(models.Enrollment).filter(
+            models.Enrollment.section_id == section.section_id,
+            models.Enrollment.archived_at.is_(None),
+        ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+
+    _commit_or_400(db)
+    return course
+
+
+# Archive an instructor and cascade to their sections
+@router.delete("/instructors/{instructor_id}", response_model=schemas.InstructorOut)
+def delete_instructor(instructor_id: int, db: Session = Depends(get_db)):
+    instructor = db.query(models.Instructor).filter(models.Instructor.instructor_id == instructor_id, models.Instructor.archived_at.is_(None)).first()
+    if instructor is None:
+        raise HTTPException(status_code=404, detail="Instructor not found")
+
+    archived_at = datetime.utcnow()
+    instructor.archived_at = archived_at
+
+    sections = db.query(models.Section).filter(models.Section.instructor_id == instructor_id, models.Section.archived_at.is_(None)).all()
+    for section in sections:
+        section.archived_at = archived_at
+        db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.section_id == section.section_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+        db.query(models.Enrollment).filter(
+            models.Enrollment.section_id == section.section_id,
+            models.Enrollment.archived_at.is_(None),
+        ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+
+    _commit_or_400(db)
+    return instructor
+
+
+# Archive a department and cascade to instructors -> sections
+@router.delete("/departments/{department_id}", response_model=schemas.DepartmentOut)
+def delete_department(department_id: int, db: Session = Depends(get_db)):
+    dept = db.query(models.Department).filter(models.Department.department_id == department_id, models.Department.archived_at.is_(None)).first()
+    if dept is None:
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    archived_at = datetime.utcnow()
+    dept.archived_at = archived_at
+
+    instructors = db.query(models.Instructor).filter(models.Instructor.department_id == department_id, models.Instructor.archived_at.is_(None)).all()
+    for instr in instructors:
+        instr.archived_at = archived_at
+        sections = db.query(models.Section).filter(models.Section.instructor_id == instr.instructor_id, models.Section.archived_at.is_(None)).all()
+        for section in sections:
+            section.archived_at = archived_at
+            db.query(models.AttendanceRecord).filter(
+                models.AttendanceRecord.section_id == section.section_id,
+                models.AttendanceRecord.archived_at.is_(None),
+            ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+            db.query(models.Enrollment).filter(
+                models.Enrollment.section_id == section.section_id,
+                models.Enrollment.archived_at.is_(None),
+            ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+
+    _commit_or_400(db)
+    return dept
+
+
+# Archive a major and cascade to students
+@router.delete("/majors/{major_id}", response_model=schemas.MajorOut)
+def delete_major(major_id: int, db: Session = Depends(get_db)):
+    major = db.query(models.Major).filter(models.Major.major_id == major_id, models.Major.archived_at.is_(None)).first()
+    if major is None:
+        raise HTTPException(status_code=404, detail="Major not found")
+
+    archived_at = datetime.utcnow()
+    major.archived_at = archived_at
+
+    students = db.query(models.Student).filter(models.Student.major_id == major_id, models.Student.archived_at.is_(None)).all()
+    for student in students:
+        student.archived_at = archived_at
+        db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == student.student_id,
+            models.AttendanceRecord.archived_at.is_(None),
+        ).update({models.AttendanceRecord.archived_at: archived_at}, synchronize_session=False)
+        db.query(models.Enrollment).filter(
+            models.Enrollment.student_id == student.student_id,
+            models.Enrollment.archived_at.is_(None),
+        ).update({models.Enrollment.archived_at: archived_at}, synchronize_session=False)
+        db.query(models.FaceTemplate).filter(
+            models.FaceTemplate.student_id == student.student_id,
+            models.FaceTemplate.archived_at.is_(None),
+        ).update({models.FaceTemplate.archived_at: archived_at}, synchronize_session=False)
+
+    _commit_or_400(db)
+    return major
+
+
+# Archive an admin user
+@router.delete("/admins/{admin_id}", response_model=schemas.AdminOut)
+def delete_admin(admin_id: int, db: Session = Depends(get_db)):
+    admin = db.query(models.Admin).filter(models.Admin.admin_id == admin_id, models.Admin.archived_at.is_(None)).first()
+    if admin is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    admin.archived_at = datetime.utcnow()
+    _commit_or_400(db)
+    return admin
+
+
 # List all admins.
 @router.get("/admins", response_model=list[schemas.AdminOut])
 def list_admins(db: Session = Depends(get_db)):
-    return db.query(models.Admin).all()
+    return db.query(models.Admin).filter(models.Admin.archived_at.is_(None)).all()
 
 
 # Create an admin.
@@ -544,7 +691,7 @@ def create_admin(payload: schemas.AdminCreate, db: Session = Depends(get_db)):
 # List all courses.
 @router.get("/courses", response_model=list[schemas.CourseOut])
 def list_courses(db: Session = Depends(get_db)):
-    return db.query(models.Course).all()
+    return db.query(models.Course).filter(models.Course.archived_at.is_(None)).all()
 
 
 # Create a course.
@@ -576,7 +723,7 @@ def debug_db_test(db: Session = Depends(get_db)):
 # List all sections.
 @router.get("/sections", response_model=list[schemas.SectionOut])
 def list_sections(db: Session = Depends(get_db)):
-    return db.query(models.Section).all()
+    return db.query(models.Section).filter(models.Section.archived_at.is_(None)).all()
 
 
 @router.get("/instructors/{instructor_id}/sections", response_model=list[schemas.SectionOut])

@@ -11,11 +11,18 @@ FastAPI backend for the AI Attendance System. It exposes JSON REST endpoints for
 
 ## Tech Stack
 
-- FastAPI
-- SQLAlchemy 2.x
-- MySQL / MariaDB via PyMySQL
-- Uvicorn
-- numpy, Pillow, python-multipart
+- **FastAPI** – Modern Python web framework for building REST APIs with automatic documentation
+- **Uvicorn** – ASGI web server that runs the FastAPI application
+- **SQLAlchemy 2.x** – ORM (Object Relational Mapping) for database operations and schema management
+- **PyMySQL** – Python driver for connecting to MySQL/MariaDB databases
+- **Pydantic** – Data validation and serialization using Python type hints
+- **python-dotenv** – Loads environment variables from `.env` files
+- **face-recognition** – Detects and encodes faces into embeddings for attendance recognition
+- **numpy** – Numerical computing library for mathematical operations and array handling
+- **Pillow** – Image processing library for handling and manipulating image files
+- **python-multipart** – Parses multipart form data for file uploads
+- **email-validator** – Validates email addresses
+- **cryptography** – Provides cryptographic functions for secure operations
 
 ## Requirements
 
